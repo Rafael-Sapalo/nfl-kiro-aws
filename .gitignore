@@ -1,0 +1,5 @@
+node_modules/
+dist/
+.DS_Store
+# Raw competition data (811 MB) lives in its own repo; see README for the link.
+nfl-big-data-bowl-regional-event-data/
