@@ -8,9 +8,9 @@
 
 ## What's on the page
 
-1. **Early Window Rate over expected**: a leaderboard filterable by threshold (2 / 2.5 / 3 yd), position and name. Click players to compare them.
-2. **Open Curves**: a Kaplan–Meier curve of the share of routes that have *created* a window by time t (censored when the throw, sack or scramble ends the passing phase), shown with the share *currently* open and the position average.
-3. **Steelers spotlight**: a synced replay of each associated opening (field view with trails and B's separation ring, plus a distance chart showing the defender's shift).
+1. **Early Window Rate over expected**: a leaderboard filterable by threshold (2 / 2.5 / 3 yd), position, name or team code. Click rows to compare up to 3 players.
+2. **Open Curves**: a Kaplan–Meier curve of the share of routes that have *created* a window by time t (censored when the throw, sack or scramble ends the passing phase), against the position average. A toggle adds the share *currently* open.
+3. **Steelers spotlight**: a synced replay of each associated opening, with completed passes to B listed first. It has a field view with trails, B's separation ring and a legend, a distance chart showing the defender's shift, and step, jump-to-opening, speed and keyboard controls.
 
 ## Method notes
 

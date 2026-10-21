@@ -3,6 +3,7 @@ import type { Association, ReplayEntity, Spotlight } from '../shared/types.ts';
 
 const RESULT: Record<string, string> = { C: 'complete', I: 'incomplete', S: 'sack', IN: 'interception', R: 'scramble' };
 const COL = { a: '#f4a261', b: '#2a9d8f', d: '#d62728', off: '#ffb612', def: '#f1f3f4', ball: '#8b4513' };
+const SPEEDS = [1, 0.5, 0.25];
 
 const short = (name: string) => {
   const parts = name.split(' ');
@@ -10,12 +11,23 @@ const short = (name: string) => {
 };
 const fmt = (v: number | null | undefined, d = 1) => (v === null || v === undefined ? 'n/a' : v.toFixed(d));
 
+function span(cls: string, text: string): HTMLSpanElement {
+  const s = document.createElement('span');
+  s.className = cls;
+  s.textContent = text;
+  return s;
+}
+
 interface Els {
   intro: HTMLElement;
   list: HTMLElement;
   table: HTMLElement;
   field: HTMLElement;
   play: HTMLButtonElement;
+  prev: HTMLButtonElement;
+  next: HTMLButtonElement;
+  jump: HTMLButtonElement;
+  speed: HTMLElement;
   scrub: HTMLInputElement;
   clock: HTMLElement;
   dist: HTMLElement;
@@ -24,16 +36,20 @@ interface Els {
 
 export function initSpotlight(sp: Spotlight, els: Els): void {
   const T = Number(sp.threshold);
+  const release =
+    sp.timeToThrowRank === 1 ? 'the quickest release in the league' : `the #${sp.timeToThrowRank} quickest release of ${sp.teamCount} teams`;
   els.intro.textContent =
     `Paris hosts its first NFL regular-season game this Sunday (25 Oct 2026): Steelers vs Saints at the Stade de France. ` +
-    `Across ${sp.teamRoutes.toLocaleString('en-US')} Steelers routes (2021, weeks 1–8) we found ${sp.associations} associated openings. ` +
-    `In each, a coverage defender moved off receiver B toward teammate A, and B's window (≥ ${sp.threshold} yd) opened within the next second. ` +
+    `In 2021 the Steelers had ${release} (median ${sp.medianTimeToThrow.toFixed(1)} s from snap to throw vs ${sp.leagueMedianTimeToThrow.toFixed(1)} s), ` +
+    `so their receivers had less time than most to create windows. ` +
+    `Across ${sp.teamRoutes.toLocaleString('en-US')} routes we found ${sp.associations} associated openings: a coverage defender moved off receiver B toward teammate A, and B's window opened within the next second. ` +
     `Pick a play to watch it. These are sequences worth inspecting, not proof that A caused the opening.`;
 
   renderTable(els.table, sp);
 
   let current: Association | null = null;
   let frame = 1;
+  let speed = 1;
   let timer: number | undefined;
   let drawField: (f: number) => void = () => {};
   let drawDist: (f: number) => void = () => {};
@@ -70,31 +86,50 @@ export function initSpotlight(sp: Spotlight, els: Els): void {
     timer = window.setInterval(() => {
       if (!current || frame >= current.lastFrame) return stop();
       show(frame + 1);
-    }, 100);
+    }, 100 / speed);
   };
+  const step = (delta: number) => {
+    stop();
+    show(frame + delta);
+  };
+
+  const renderSpeed = () => {
+    els.speed.replaceChildren(
+      ...SPEEDS.map((s) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.textContent = `${s}×`;
+        b.setAttribute('aria-pressed', String(s === speed));
+        b.addEventListener('click', () => {
+          speed = s;
+          renderSpeed();
+          if (timer !== undefined) {
+            stop();
+            play();
+          }
+        });
+        return b;
+      }),
+    );
+  };
+  renderSpeed();
 
   const buttons: HTMLButtonElement[] = [];
   const select = (i: number, autoplay: boolean) => {
     stop();
-    current = sp.plays[i];
+    const a = sp.plays[i];
+    current = a;
     buttons.forEach((b, k) => b.setAttribute('aria-pressed', String(k === i)));
-    drawField = buildField(els.field, current, T);
-    drawDist = buildDistChart(els.dist, current, T);
-    els.scrub.max = String(current.lastFrame);
-    const a = current;
-    const i0 = a.f0 - 1;
-    const i1 = a.f1 - 1;
-    els.desc.replaceChildren();
-    const lead = document.createElement('strong');
-    lead.textContent = `${a.d.name} (${a.d.pos}) was ${fmt(a.distDB[i0])} yd from ${a.b.name}. `;
-    const rest = document.createTextNode(
-      `In the next ${((a.f1 - a.f0) / 10).toFixed(1)} s he moved ${fmt(a.towardA)} yd in ${a.a.name}'s direction and ended ${fmt(a.distDB[i1])} yd from B. ` +
-        `${a.b.name} opened at +${a.tOpen.toFixed(1)} s. Result: ${RESULT[a.passResult] ?? a.passResult}. `,
-    );
-    const pbp = document.createElement('span');
-    pbp.className = 'muted';
-    pbp.textContent = `Play-by-play: ${a.description}`;
-    els.desc.append(lead, rest, pbp);
+    // Highlight A and B in the Steelers table.
+    els.table.querySelectorAll<HTMLTableRowElement>('tr[data-id]').forEach((tr) => {
+      const id = Number(tr.dataset.id);
+      tr.classList.toggle('is-a', id === a.a.nflId);
+      tr.classList.toggle('is-b', id === a.b.nflId);
+    });
+    drawField = buildField(els.field, a, T);
+    drawDist = buildDistChart(els.dist, a, T);
+    els.scrub.max = String(a.lastFrame);
+    renderDesc(els.desc, a);
     if (autoplay) {
       show(Math.max(1, a.snapFrame - 2));
       play();
@@ -112,10 +147,19 @@ export function initSpotlight(sp: Spotlight, els: Els): void {
     btn.className = 'play-item';
     const title = document.createElement('span');
     title.className = 'play-title';
-    title.textContent = `${short(a.a.name)} draws ${short(a.d.name)} → ${short(a.b.name)} opens at ${a.tOpen.toFixed(1)} s`;
+    title.append(
+      span('who-a', short(a.a.name)),
+      ' draws ',
+      span('who-d', short(a.d.name)),
+      ' → ',
+      span('who-b', short(a.b.name)),
+      ` opens at ${a.tOpen.toFixed(1)} s`,
+    );
     const meta = document.createElement('span');
     meta.className = 'play-meta';
-    meta.textContent = `Wk ${a.week} vs ${a.opponent} · Q${a.quarter} ${a.down}&${a.yardsToGo} · ${a.coverage || a.coverageType} · ${RESULT[a.passResult] ?? a.passResult}`;
+    meta.append(span(`badge res-${a.passResult}`, RESULT[a.passResult] ?? a.passResult));
+    if (a.target === 'B') meta.append(span('badge to-b', 'thrown to B'));
+    meta.append(` Wk ${a.week} vs ${a.opponent} · Q${a.quarter} ${a.down}&${a.yardsToGo} · ${a.coverage || a.coverageType}`);
     btn.append(title, meta);
     btn.addEventListener('click', () => select(i, true));
     buttons.push(btn);
@@ -124,11 +168,53 @@ export function initSpotlight(sp: Spotlight, els: Els): void {
   });
 
   els.play.addEventListener('click', play);
+  els.prev.addEventListener('click', () => step(-1));
+  els.next.addEventListener('click', () => step(1));
+  els.jump.addEventListener('click', () => {
+    if (!current) return;
+    stop();
+    show(current.f1);
+  });
   els.scrub.addEventListener('input', () => {
     stop();
     show(Number(els.scrub.value));
   });
+
+  // Keyboard control once the field has focus (click it or Tab to it).
+  els.field.tabIndex = 0;
+  els.field.setAttribute('aria-label', 'Play replay. Space plays or pauses, left and right arrows step one frame.');
+  els.field.addEventListener('keydown', (e) => {
+    if (e.key === ' ') {
+      e.preventDefault();
+      play();
+    } else if (e.key === 'ArrowRight') {
+      e.preventDefault();
+      step(1);
+    } else if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      step(-1);
+    }
+  });
+
   if (sp.plays.length) select(0, false);
+}
+
+function renderDesc(el: HTMLElement, a: Association): void {
+  const i0 = a.f0 - 1;
+  const i1 = a.f1 - 1;
+  const target: Record<Association['target'], string> = {
+    B: `The ball went to ${a.b.name}. `,
+    A: `The ball went to ${a.a.name}. `,
+    other: 'The ball went to another receiver. ',
+    none: '',
+  };
+  const lead = document.createElement('strong');
+  lead.textContent = `${a.d.name} (${a.d.pos}) was ${fmt(a.distDB[i0])} yd from ${a.b.name}. `;
+  const rest = document.createTextNode(
+    `In the next ${((a.f1 - a.f0) / 10).toFixed(1)} s he moved ${fmt(a.towardA)} yd in ${a.a.name}'s direction and ended ${fmt(a.distDB[i1])} yd from B. ` +
+      `${a.b.name} opened at +${a.tOpen.toFixed(1)} s. ${target[a.target]}Result: ${RESULT[a.passResult] ?? a.passResult}. `,
+  );
+  el.replaceChildren(lead, rest, span('muted', `Play-by-play: ${a.description}`));
 }
 
 function renderTable(container: HTMLElement, sp: Spotlight): void {
@@ -146,6 +232,7 @@ function renderTable(container: HTMLElement, sp: Spotlight): void {
   const body = table.createTBody();
   for (const p of sp.players) {
     const tr = body.insertRow();
+    tr.dataset.id = String(p.nflId);
     const cells = [
       `${p.name} · ${p.pos}`,
       String(p.routes),
@@ -241,15 +328,14 @@ function buildField(container: HTMLElement, a: Association, T: number): (f: numb
     c.append('title').text(`${e.name}${e.jersey !== null ? ` #${e.jersey}` : ''} · ${e.role}`);
     return { e, c };
   });
-  // Fixed offsets (yards) so the three labels don't collide when the players are close together.
+  // Labels sit on the side of each player facing the middle of the view, so they never fall off the edge.
+  // Vertical offsets (yards) keep the three labels apart when the players are close together.
+  const midX = (xmin + xmax) / 2;
   const labels = [
-    { e: A, text: `A · ${short(a.a.name)}`, color: COL.a, dx: -1.4, dy: -1.6, anchor: 'end' },
-    { e: B, text: `B · ${short(a.b.name)}`, color: COL.b, dx: -1.4, dy: 2.4, anchor: 'end' },
-    { e: D, text: `D · ${short(a.d.name)}`, color: COL.d, dx: 1.5, dy: 0.6, anchor: 'start' },
-  ].map((l) => ({
-    ...l,
-    t: svg.append('text').attr('class', 'label').attr('fill', l.color).attr('text-anchor', l.anchor).text(l.text),
-  }));
+    { e: A, text: `A · ${short(a.a.name)}`, color: COL.a, dy: -1.5 },
+    { e: B, text: `B · ${short(a.b.name)}`, color: COL.b, dy: 2.3 },
+    { e: D, text: `D · ${short(a.d.name)}`, color: COL.d, dy: 0.5 },
+  ].map((l) => ({ ...l, t: svg.append('text').attr('class', 'label').attr('fill', l.color).text(l.text) }));
 
   const line = d3.line<[number, number]>();
   return (f: number) => {
@@ -270,7 +356,12 @@ function buildField(container: HTMLElement, a: Association, T: number): (f: numb
     }
     for (const l of labels) {
       const p = at(l.e, i);
-      if (p) l.t.attr('x', p[0] + l.dx).attr('y', p[1] + l.dy);
+      if (!p) continue;
+      const toLeft = p[0] > midX;
+      l.t
+        .attr('x', p[0] + (toLeft ? -1.4 : 1.4))
+        .attr('y', p[1] + l.dy)
+        .attr('text-anchor', toLeft ? 'end' : 'start');
     }
     const pa = at(A, i);
     const pb = at(B, i);
@@ -307,6 +398,17 @@ function buildDistChart(container: HTMLElement, a: Association, T: number): (f: 
     .attr('viewBox', `0 0 ${W} ${H}`)
     .attr('role', 'img')
     .attr('aria-label', 'Distances over time for the selected play');
+  // Keep long distance lines inside the plot so they never run over the legend.
+  const clipId = 'dist-clip';
+  svg
+    .append('defs')
+    .append('clipPath')
+    .attr('id', clipId)
+    .append('rect')
+    .attr('x', M.l)
+    .attr('y', M.t)
+    .attr('width', W - M.l - M.r)
+    .attr('height', H - M.t - M.b);
 
   svg
     .append('rect')
@@ -343,7 +445,13 @@ function buildDistChart(container: HTMLElement, a: Association, T: number): (f: 
     { vals: a.distDA, color: COL.a, label: 'Defender D ↔ A', w: 2 },
   ];
   series.forEach((s, k) => {
-    svg.append('path').attr('d', line(s.vals)).attr('fill', 'none').attr('stroke', s.color).attr('stroke-width', s.w);
+    svg
+      .append('path')
+      .attr('d', line(s.vals))
+      .attr('fill', 'none')
+      .attr('stroke', s.color)
+      .attr('stroke-width', s.w)
+      .attr('clip-path', `url(#${clipId})`);
     const lx = M.l + k * 190;
     svg.append('rect').attr('x', lx).attr('y', 6).attr('width', 12).attr('height', 4).attr('fill', s.color);
     svg.append('text').attr('class', 'mini-legend').attr('x', lx + 16).attr('y', 12).text(s.label);

@@ -232,6 +232,7 @@ function buildAssociation(
     coverage: info.coverage,
     coverageType: info.coverageType,
     passResult: info.passResult,
+    target: res.targetId === null ? 'none' : res.targetId === c.bId ? 'B' : res.targetId === c.aId ? 'A' : 'other',
     a: ref(c.aId, A),
     b: ref(c.bId, B),
     d: ref(c.dId, D),
@@ -271,6 +272,8 @@ function main(): void {
   let playsAnalyzed = 0;
   let routesAnalyzed = 0;
   let targetsMatched = 0;
+  /** Snap-to-throw times (s) per offense, for the quick-release context in the spotlight. */
+  const throwTimes = new Map<string, number[]>();
 
   const spotAssociations: { score: number; assoc: Association }[] = [];
   const drew = new Map<number, number>();
@@ -292,6 +295,11 @@ function main(): void {
       if (!res) continue;
       playsAnalyzed++;
       if (targetId !== null) targetsMatched++;
+      if (res.isThrow) {
+        const times = throwTimes.get(info.offense) ?? [];
+        times.push((res.end - res.snap) / 10);
+        throwTimes.set(info.offense, times);
+      }
 
       res.routes.forEach((route, ri) => {
         const pos = ds.players.get(route.nflId)?.pos;
@@ -434,6 +442,9 @@ function main(): void {
   };
 
   // ---------- spotlight team ----------
+  const teamTimeToThrow = [...throwTimes.entries()]
+    .map(([team, times]) => ({ team, med: median(times) ?? 0 }))
+    .sort((a, b) => a.med - b.med);
   const spotPlayers: SpotlightPlayer[] = [];
   for (const [nflId, g] of players) {
     const p = ds.players.get(nflId)!;
@@ -454,8 +465,10 @@ function main(): void {
   }
   spotPlayers.sort((a, b) => b.drewPer100 - a.drewPer100);
   const seen = new Set<string>();
+  // Show the clearest stories first: completed passes to B, then any throw to B, then the strongest shifts.
+  const priority = (a: Association) => (a.target === 'B' ? (a.passResult === 'C' ? 2 : 1) : 0);
   const topPlays = spotAssociations
-    .sort((a, b) => b.score - a.score)
+    .sort((a, b) => priority(b.assoc) - priority(a.assoc) || b.score - a.score)
     .filter(({ assoc }) => {
       const k = `${assoc.gameId}-${assoc.playId}`;
       if (seen.has(k)) return false;
@@ -470,6 +483,10 @@ function main(): void {
     threshold: PRIMARY_T,
     teamRoutes: spotRoutes,
     associations: spotAssociations.length,
+    medianTimeToThrow: round(median(throwTimes.get(SPOTLIGHT_TEAM) ?? []) ?? 0, 2),
+    leagueMedianTimeToThrow: round(median([...throwTimes.values()].flat()) ?? 0, 2),
+    timeToThrowRank: teamTimeToThrow.findIndex((t) => t.team === SPOTLIGHT_TEAM) + 1,
+    teamCount: teamTimeToThrow.length,
     players: spotPlayers,
     plays: topPlays,
   };

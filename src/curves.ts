@@ -6,6 +6,7 @@ const H = 380;
 const M = { t: 18, r: 18, b: 46, l: 54 };
 const GREYS: Record<string, string> = { WR: '#5f6873', TE: '#9aa3ad', RB: '#c3c9d0' };
 const TIMES = d3.range(CURVE_BINS).map((i) => i / 10);
+const EARLY_INDEX = 25; // 2.5 s
 
 interface Series {
   label: string;
@@ -15,13 +16,14 @@ interface Series {
   baseline?: boolean;
 }
 
-/** Open Curves: cumulative "has created a window" (solid) and "currently open" (dashed) vs time since snap. */
+/** Open Curves: cumulative "has created a window" (solid) and, optionally, "currently open" (dashed) vs time since snap. */
 export function renderCurves(
   container: HTMLElement,
   legend: HTMLElement,
   selected: { row: PlayerRow; color: string }[],
   baselines: PositionBaseline[],
   T: ThresholdKey,
+  showNow: boolean,
 ): void {
   container.replaceChildren();
   legend.replaceChildren();
@@ -45,6 +47,16 @@ export function renderCurves(
     .attr('role', 'img')
     .attr('aria-label', `Open curves at ${T} yards for ${series.map((s) => s.label).join(', ')}`);
 
+  // Early zone (first 2.5 s) behind everything.
+  svg
+    .append('rect')
+    .attr('class', 'early-zone')
+    .attr('x', x(0))
+    .attr('y', M.t)
+    .attr('width', x(2.5) - x(0))
+    .attr('height', H - M.t - M.b);
+  svg.append('text').attr('class', 'early-label').attr('x', x(0) + 6).attr('y', M.t + 14).text('Early: first 2.5 s after the snap');
+
   svg
     .append('g')
     .attr('class', 'gridlines')
@@ -66,11 +78,9 @@ export function renderCurves(
     .attr('class', 'axis-title')
     .attr('transform', `translate(14,${(M.t + H - M.b) / 2}) rotate(-90)`)
     .attr('text-anchor', 'middle')
-    .text('Share of routes');
+    .text(showNow ? 'Share of routes' : 'Share of routes that created a window');
 
-  // 2.5 s "early" deadline.
   svg.append('line').attr('class', 'deadline').attr('x1', x(2.5)).attr('x2', x(2.5)).attr('y1', M.t).attr('y2', H - M.b);
-  svg.append('text').attr('class', 'deadline-label').attr('x', x(2.5) + 4).attr('y', M.t + 12).text('2.5 s: early deadline');
 
   const line = d3
     .line<number>()
@@ -79,14 +89,16 @@ export function renderCurves(
     .y((d) => y(d));
 
   for (const s of series) {
-    svg
-      .append('path')
-      .attr('d', line(s.now))
-      .attr('fill', 'none')
-      .attr('stroke', s.color)
-      .attr('stroke-width', s.baseline ? 1.5 : 2)
-      .attr('stroke-dasharray', '5 4')
-      .attr('opacity', s.baseline ? 0.8 : 0.9);
+    if (showNow) {
+      svg
+        .append('path')
+        .attr('d', line(s.now))
+        .attr('fill', 'none')
+        .attr('stroke', s.color)
+        .attr('stroke-width', s.baseline ? 1.5 : 2)
+        .attr('stroke-dasharray', '5 4')
+        .attr('opacity', s.baseline ? 0.8 : 0.9);
+    }
     svg
       .append('path')
       .attr('d', line(s.opened))
@@ -114,10 +126,12 @@ export function renderCurves(
   const fmt = (d: number | undefined) => (d === undefined || d < 0 ? 'n/a' : `${Math.round(d * 100)}%`);
   const setValues = (i: number) => {
     series.forEach((s, k) => {
-      valueSpans[k].textContent = `created ${fmt(s.opened[i])} · open now ${fmt(s.now[i])} @ ${TIMES[i].toFixed(1)} s`;
+      valueSpans[k].textContent = showNow
+        ? `created ${fmt(s.opened[i])} · open now ${fmt(s.now[i])} @ ${TIMES[i].toFixed(1)} s`
+        : `${fmt(s.opened[i])} created a window by ${TIMES[i].toFixed(1)} s`;
     });
   };
-  setValues(25);
+  setValues(EARLY_INDEX);
 
   const rule = svg.append('line').attr('class', 'hover-rule').attr('y1', M.t).attr('y2', H - M.b).attr('opacity', 0);
   svg
@@ -135,6 +149,6 @@ export function renderCurves(
     })
     .on('mouseleave', () => {
       rule.attr('opacity', 0);
-      setValues(25);
+      setValues(EARLY_INDEX);
     });
 }

@@ -109,6 +109,8 @@ export interface Association {
   coverage: string;
   coverageType: string;
   passResult: string;
+  /** Who the ball went to (parsed play-by-play target): B, A, another receiver, or none (sack, scramble, unmatched). */
+  target: 'A' | 'B' | 'other' | 'none';
   /** Receiver whose route the defender moved toward. */
   a: PlayerRef;
   /** Receiver whose window opened afterwards. */
@@ -152,6 +154,11 @@ export interface Spotlight {
   threshold: ThresholdKey;
   teamRoutes: number;
   associations: number;
+  /** Median snap-to-throw time (s) for this offense and the league, and the team's rank (1 = quickest release). */
+  medianTimeToThrow: number;
+  leagueMedianTimeToThrow: number;
+  timeToThrowRank: number;
+  teamCount: number;
   players: SpotlightPlayer[];
   plays: Association[];
 }

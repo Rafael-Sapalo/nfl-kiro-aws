@@ -4,18 +4,24 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Open Windows · NFL Big Data Bowl Paris</title>
-    <meta name="description" content="Who creates an early passing window, for himself or for a teammate? Built on 2021 NFL Next Gen Stats tracking data." />
+    <meta
+      name="description"
+      content="Who creates an early passing window, for himself or for a teammate? Built on 2021 NFL Next Gen Stats tracking data."
+    />
   </head>
   <body>
+    <a class="skip-link" href="#main">Skip to content</a>
     <header class="hero">
-      <p class="eyebrow">NFL Big Data Bowl · Paris Side Quest · 2021 Next Gen Stats tracking, weeks 1–8</p>
-      <h1>Open Windows</h1>
-      <p class="lede">Who creates an early passing window, for himself or for a teammate?</p>
-      <div id="kpis" class="kpis" aria-live="polite"></div>
+      <div class="hero-inner">
+        <p class="eyebrow">NFL Big Data Bowl · Paris Side Quest · 2021 Next Gen Stats tracking, weeks 1–8</p>
+        <h1>Open Windows</h1>
+        <p class="lede">Who creates an early passing window, for himself or for a teammate?</p>
+        <div id="kpis" class="kpis"></div>
+      </div>
     </header>
 
-    <main>
-      <section class="controls" aria-label="Controls">
+    <div class="toolbar-wrap">
+      <section class="toolbar" aria-label="Filters for the leaderboard and Open Curves">
         <div class="control">
           <span class="control-label" id="t-label">Separation threshold</span>
           <div class="segmented" role="group" aria-labelledby="t-label" id="threshold"></div>
@@ -25,53 +31,88 @@
           <div class="segmented" role="group" aria-labelledby="pos-label" id="position"></div>
         </div>
         <div class="control">
-          <label class="control-label" for="search">Find a player</label>
-          <input id="search" type="search" placeholder="e.g. Deebo, Kelce, Kupp" autocomplete="off" />
+          <label class="control-label" for="search">Find a player or team</label>
+          <input id="search" type="search" placeholder="e.g. Deebo, Kelce, PIT" autocomplete="off" />
         </div>
+        <nav class="jump" aria-label="Sections">
+          <a href="#sec-board">Leaderboard</a>
+          <a href="#sec-curves">Open Curves</a>
+          <a href="#sec-spot">Steelers replay</a>
+          <a href="#sec-method">Method</a>
+        </nav>
       </section>
+    </div>
 
+    <main id="main">
       <section class="grid">
-        <article class="card">
-          <h2>1 · Personal availability: Early Window Rate over expected</h2>
+        <article class="card" id="sec-board" aria-labelledby="board-title">
+          <h2 id="board-title"><span class="step" aria-hidden="true">1</span>Who creates new windows?</h2>
           <p class="hint">
-            How often a receiver turns <strong>covered</strong> into <strong>open</strong> (≥ T yd from the nearest coverage
-            defender, held 0.3 s) before 2.5 s or the end of the passing phase, minus the league rate for routes with the same
-            alignment, coverage type and starting cushion. Cushion he already had at the snap is never credited.
-            <em>Click players to compare them (up to 3).</em>
+            <strong>Early Window Rate (EWR)</strong>: share of routes where a receiver turns <strong>covered</strong> into
+            <strong>open</strong> (≥ T yd from the nearest coverage defender, held 0.3 s) before 2.5 s or the end of the passing
+            phase. <strong>vs expected</strong> subtracts the league rate for routes with the same alignment, coverage type and
+            starting cushion. Cushion he already had at the snap never counts. <em>Click a row to compare players.</em>
           </p>
-          <div id="board"></div>
+          <div id="board" class="board-wrap"><p class="note">Loading data…</p></div>
           <p id="board-note" class="note"></p>
         </article>
 
-        <article class="card">
-          <h2>2 · Open Curves: when do windows appear?</h2>
+        <article class="card" id="sec-curves" aria-labelledby="curves-title">
+          <h2 id="curves-title"><span class="step" aria-hidden="true">2</span>Open Curves: when do windows appear?</h2>
           <p class="hint">
-            <strong>Solid:</strong> share of routes that have <em>created</em> a window by time t (Kaplan–Meier, routes censored
-            when the throw, sack or scramble ends the passing phase). <strong>Dashed:</strong> share currently in a window
-            (created or conceded). <strong>Grey:</strong> position average. Hover to read values.
+            Share of routes that have <strong>created</strong> a window by each moment after the snap (Kaplan–Meier: a route drops
+            out when the throw, sack or scramble ends the passing phase, so nothing after the throw is guessed). Grey lines are
+            position averages. Hover the chart to read values.
           </p>
-          <div id="curves" class="chart"></div>
+          <div class="compare-bar">
+            <div id="compare" class="compare" aria-live="polite"></div>
+            <label class="toggle"><input type="checkbox" id="show-now" /> Also show “currently open” (dashed)</label>
+          </div>
+          <div id="curves" class="chart"><p class="note">Loading data…</p></div>
           <div id="curve-legend" class="legend"></div>
         </article>
       </section>
 
-      <section class="card spotlight" aria-labelledby="spot-title">
-        <h2 id="spot-title">3 · Teammate support: Steelers spotlight</h2>
+      <section class="card spotlight" id="sec-spot" aria-labelledby="spot-title">
+        <h2 id="spot-title">
+          <span class="step" aria-hidden="true">3</span>Teammate support: Steelers spotlight <span class="tag">2.5 yd windows</span>
+        </h2>
         <p class="hint" id="spot-intro"></p>
         <div class="spot-grid">
           <div class="spot-left">
             <h3>Associated openings</h3>
             <ol id="plays" class="plays"></ol>
-            <h3>Steelers receivers (2.5 yd)</h3>
-            <div id="spot-table"></div>
+            <h3>Steelers receivers</h3>
+            <div id="spot-table" class="board-wrap"></div>
           </div>
           <div class="spot-right">
-            <div id="field" class="field"></div>
+            <div id="field" class="field" role="group"></div>
+            <ul class="field-legend" aria-label="Replay legend">
+              <li><span class="key-dot" style="--c: #f4a261"></span>A · teammate the defender moves toward</li>
+              <li><span class="key-dot" style="--c: #2a9d8f"></span>B · receiver who opens</li>
+              <li><span class="key-dot" style="--c: #d62728"></span>D · defender who shifts</li>
+              <li><span class="key-dot" style="--c: #ffb612"></span>Steelers</li>
+              <li><span class="key-dot" style="--c: #f1f3f4"></span>Defense</li>
+              <li>
+                <span class="key-ring" style="--c: #ff8a80"></span><span class="key-ring" style="--c: #b9f6ca"></span>B's window:
+                covered / open
+              </li>
+              <li><span class="key-line" style="--c: #4ea3ff"></span>Line of scrimmage</li>
+              <li><span class="key-line" style="--c: #ffe14d"></span>First down</li>
+            </ul>
             <div class="player-controls">
-              <button id="play" type="button">▶ Play</button>
+              <button id="prev" type="button" class="icon-btn" aria-label="Previous frame" title="Previous frame">‹</button>
+              <button id="play" type="button" class="primary">▶ Play</button>
+              <button id="next" type="button" class="icon-btn" aria-label="Next frame" title="Next frame">›</button>
               <label class="sr-only" for="scrub">Frame</label>
               <input id="scrub" type="range" min="1" max="1" value="1" />
-              <span id="clock" class="clock" aria-live="off"></span>
+              <span id="clock" class="clock"></span>
+            </div>
+            <div class="player-controls secondary">
+              <button id="jump" type="button" class="ghost">Jump to the opening</button>
+              <span class="control-label" id="speed-label">Speed</span>
+              <div class="segmented small" role="group" aria-labelledby="speed-label" id="speed"></div>
+              <span class="note kbd-hint">Click the field, then Space to play or pause and ← → to step</span>
             </div>
             <div id="dist-chart" class="chart"></div>
             <p id="play-desc" class="desc"></p>
@@ -79,8 +120,8 @@
         </div>
       </section>
 
-      <section class="card method">
-        <h2>Method, assumptions, limitations</h2>
+      <section class="card method" id="sec-method" aria-labelledby="method-title">
+        <h2 id="method-title">Method, assumptions, limitations</h2>
         <ul>
           <li><strong>Data:</strong> 122 games, 8,557 dropbacks, NGS tracking at 10 Hz, normalised so offense moves left → right. Route runners and coverage defenders come from PFF roles.</li>
           <li><strong>Separation</strong> = distance to the nearest PFF <em>coverage</em> defender. A <strong>window</strong> is separation ≥ T yards held for 0.3 s. It's a separation-based window; distance alone doesn't prove a throw was feasible.</li>
@@ -88,11 +129,14 @@
           <li><strong>Expected rate</strong> comes from league routes with the same alignment (outside, slot, inline TE, backfield), coverage type (man, zone, other) and starting-cushion bucket.</li>
           <li><strong>Tracking stops 0.5 s after the throw or sack</strong>, so routes are censored when the passing phase ends. We don't infer what a receiver would have done later. The Early Window Rate isn't adjusted for a QB's time to throw, so quick-release offenses get fewer chances. The 2021 Steelers had the league's quickest median release (2.4 s vs 2.7 s), which partly explains their low rates. The Open Curves are censoring-aware, so use them for those comparisons.</li>
           <li><strong>Teammate support</strong> is an <em>associated opening</em>: B's nearest coverage defender (within 7 yd) moves ≥ 1 yd in the direction of teammate A (ending ≤ 12 yd from him) and gets ≥ 1 yd farther from B in the second before B's window opens. It's a sequence, not proof that A caused it, so we show it on a few inspected plays, not as a league ranking.</li>
-          <li><strong>Running backs</strong> start in the backfield with large cushions (more than 99% of routes are already ≥ 2.5 yd at the snap), so they rarely <em>create</em> new windows. Read their dashed curve instead.</li>
+          <li><strong>Running backs</strong> start in the backfield with large cushions (more than 99% of routes are already ≥ 2.5 yd at the snap), so they rarely <em>create</em> new windows. Turn on the “currently open” curves to compare them.</li>
         </ul>
       </section>
     </main>
-    <footer class="footer">Built with TypeScript, d3 and Kiro · Data: NFL Next Gen Stats + PFF (Big Data Bowl 2023 regional data)</footer>
+    <footer class="footer">
+      Built with TypeScript, d3 and Kiro · Data: NFL Next Gen Stats + PFF (Big Data Bowl 2023 regional data) ·
+      <a href="https://github.com/Rafael-Sapalo/nfl-kiro-aws">Source on GitHub</a>
+    </footer>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
